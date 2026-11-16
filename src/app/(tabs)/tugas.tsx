@@ -7,7 +7,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  View,
+  View
 } from "react-native";
 import Svg, { Path } from "react-native-svg";
 import {
@@ -15,7 +15,14 @@ import {
   IkonPanah,
   TagTitik,
 } from "../../components/dashboard/panel-kartu";
-import { type TugasItem, useDaftarTugas } from "../../lib/tugas";
+import { toast, WadahToast } from "../../components/toast";
+import FormTugas from "../../components/tugas/form-tugas";
+import MenuTugas from "../../components/tugas/menu-tugas";
+import {
+  type MasukanTugas,
+  type TugasItem,
+  useDaftarTugas,
+} from "../../lib/tugas";
 
 type Tab = "aktif" | "terlambat" | "selesai" | "dibatalkan";
 
@@ -171,7 +178,13 @@ function KartuStat({
 
 /* ---------------- Baris tugas ---------------- */
 
-function BarisTugas({ t }: { t: TugasItem }) {
+function BarisTugas({
+  t,
+  onPress,
+}: {
+  t: TugasItem;
+  onPress: () => void;
+}) {
   const mulai = formatWaktu(t.start_date, t.start_time);
   const selesai = formatWaktu(t.due_date, t.due_time);
   const waktu =
@@ -185,7 +198,10 @@ function BarisTugas({ t }: { t: TugasItem }) {
   const warna = WARNA_PRIORITAS[t.priority] ?? C.mist;
 
   return (
-    <View style={s.baris}>
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [s.baris, pressed && { opacity: 0.7 }]}
+    >
       <View style={s.barisAtas}>
         <View style={[s.garisPrioritas, { backgroundColor: warna }]} />
         <View style={{ flex: 1 }}>
@@ -203,7 +219,7 @@ function BarisTugas({ t }: { t: TugasItem }) {
           warna={C.mist}
         />
       </View>
-    </View>
+    </Pressable>
   );
 }
 
@@ -246,9 +262,24 @@ function ProgresSetengah({ persen }: { persen: number }) {
 
 export default function Tugas() {
   const router = useRouter();
-  const { tugas, hariIni, memuat, menyegarkan, galat, muat, segarkan } =
-    useDaftarTugas();
+  const {
+    tugas,
+    hariIni,
+    memuat,
+    menyegarkan,
+    galat,
+    muat,
+    segarkan,
+    ubahStatus,
+    tambahTugas,
+    hapusTugas,
+    ubahTugas,
+  } = useDaftarTugas();
   const [tab, setTab] = useState<Tab>("aktif");
+  const [menuTugas, setMenuTugas] = useState<TugasItem | null>(null);
+  const [formTerbuka, setFormTerbuka] = useState(false);
+  const [tugasEdit, setTugasEdit] = useState<TugasItem | null>(null);
+  const [editTerbuka, setEditTerbuka] = useState(false);
 
   // Muat ulang setiap kali tab Tugas dibuka
   useFocusEffect(
@@ -309,6 +340,31 @@ export default function Tugas() {
     1
   );
 
+  const ubahDenganToast = async (id: string, status: string) => {
+    const hasil = await ubahStatus(id, status);
+    if (hasil.ok) toast.sukses("Status tugas diperbarui");
+    return hasil;
+  };
+
+  const tambahDenganToast = async (n: MasukanTugas) => {
+    const hasil = await tambahTugas(n);
+    if (hasil.ok) toast.sukses("Tugas berhasil ditambahkan");
+    return hasil;
+  };
+
+  const simpanEditDenganToast = async (n: MasukanTugas) => {
+    if (!tugasEdit) return { ok: false, pesan: "Tugas tidak ditemukan." };
+    const hasil = await ubahTugas(tugasEdit.id, n);
+    if (hasil.ok) toast.sukses("Tugas berhasil diperbarui");
+    return hasil;
+  };
+
+  const hapusDenganToast = async (id: string) => {
+    const hasil = await hapusTugas(id);
+    if (hasil.ok) toast.sukses("Tugas berhasil dihapus");
+    return hasil;
+  };
+
   const bukaKalender = () => router.navigate("/kalender" as never);
   const tombolKalender = (
     <Pressable onPress={bukaKalender} style={s.tombolAqua}>
@@ -325,6 +381,7 @@ export default function Tugas() {
   }
 
   return (
+    <View style={{ flex: 1 }}>
     <ScrollView
       style={s.layar}
       contentContainerStyle={s.isi}
@@ -345,6 +402,18 @@ export default function Tugas() {
         <Text style={s.sub}>
           Susun, urutkan, dan selesaikan tugasmu dengan tenang.
         </Text>
+        <View
+          style={{
+            marginTop: 14,
+            flexDirection: "row",
+            flexWrap: "wrap",
+            gap: 8,
+          }}
+        >
+          <Pressable onPress={() => setFormTerbuka(true)} style={s.tombolAqua}>
+            <Text style={s.teksTombolAqua}>Tambah tugas</Text>
+          </Pressable>
+        </View>
       </View>
 
       {/* Kartu statistik */}
@@ -389,7 +458,7 @@ export default function Tugas() {
         ) : (
           <View style={{ gap: 8 }}>
             {tampil.map((t) => (
-              <BarisTugas key={t.id} t={t} />
+              <BarisTugas key={t.id} t={t} onPress={() => setMenuTugas(t)} />
             ))}
           </View>
         )}
@@ -478,7 +547,37 @@ export default function Tugas() {
           ))}
         </View>
       </View>
+      <MenuTugas
+        tugas={menuTugas}
+        onTutup={() => setMenuTugas(null)}
+        onUbah={ubahDenganToast}
+        onHapus={hapusDenganToast}
+        onEdit={(t) => {
+          setMenuTugas(null);
+          setTugasEdit(t);
+          setEditTerbuka(true);
+        }}
+      />
+
+      <FormTugas
+        terbuka={formTerbuka}
+        onTutup={() => setFormTerbuka(false)}
+        onSimpan={tambahDenganToast}
+      />
+
+      {tugasEdit ? (
+        <FormTugas
+          key={tugasEdit.id}
+          tugas={tugasEdit}
+          terbuka={editTerbuka}
+          onTutup={() => setEditTerbuka(false)}
+          onSelesaiTutup={() => setTugasEdit(null)}
+          onSimpan={simpanEditDenganToast}
+        />
+      ) : null}
     </ScrollView>
+      <WadahToast />
+    </View>
   );
 }
 
