@@ -1,19 +1,22 @@
 import {
-    useCallback,
-    useEffect,
-    useRef,
-    useState,
-    type ReactNode,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
 } from "react";
 import {
-    Animated,
-    Easing,
-    Modal,
-    Pressable,
-    StyleSheet,
-    useWindowDimensions,
-    View,
-    type LayoutChangeEvent,
+  Animated,
+  Easing,
+  Keyboard,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  StyleSheet,
+  useWindowDimensions,
+  View,
+  type LayoutChangeEvent,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { C } from "../dashboard/panel-kartu";
@@ -50,6 +53,21 @@ export function LembarBawah({
     selesaiRef.current = onSelesaiTutup;
   });
 
+  // Saat keyboard tampil, jarak aman bawah dihilangkan karena sudah
+  // tertutup keyboard (kalau tidak, ada celah kosong di atas keyboard)
+  const [keyboardTampil, setKeyboardTampil] = useState(false);
+  useEffect(() => {
+    const evTampil =
+      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const evSembunyi =
+      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+    const a = Keyboard.addListener(evTampil, () => setKeyboardTampil(true));
+    const b = Keyboard.addListener(evSembunyi, () => setKeyboardTampil(false));
+    return () => {
+      a.remove();
+      b.remove();
+    };
+  }, []);
   const masuk = useCallback(() => {
     Animated.timing(geser, {
       toValue: 1,
@@ -104,7 +122,7 @@ export function LembarBawah({
       hardwareAccelerated
       onRequestClose={onTutup}
     >
-      <View style={s.wadah}>
+      <KeyboardAvoidingView behavior="padding" style={s.wadah}>
         <Animated.View style={[s.latar, { opacity: geser }]}>
           <Pressable
             style={StyleSheet.absoluteFill}
@@ -116,13 +134,16 @@ export function LembarBawah({
           onLayout={saatLayout}
           style={[
             s.panel,
-            { paddingBottom: insets.bottom, transform: [{ translateY: geserY }] },
+            {
+              paddingBottom: keyboardTampil ? 0 : insets.bottom,
+              transform: [{ translateY: geserY }],
+            },
           ]}
         >
           <View style={s.pegangan} />
           {children}
         </Animated.View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

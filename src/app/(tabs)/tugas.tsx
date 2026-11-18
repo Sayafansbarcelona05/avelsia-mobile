@@ -16,6 +16,7 @@ import {
   TagTitik,
 } from "../../components/dashboard/panel-kartu";
 import { toast, WadahToast } from "../../components/toast";
+import FormAI from "../../components/tugas/form-ai";
 import FormTugas from "../../components/tugas/form-tugas";
 import MenuTugas from "../../components/tugas/menu-tugas";
 import {
@@ -280,6 +281,7 @@ export default function Tugas() {
   const [formTerbuka, setFormTerbuka] = useState(false);
   const [tugasEdit, setTugasEdit] = useState<TugasItem | null>(null);
   const [editTerbuka, setEditTerbuka] = useState(false);
+  const [aiTerbuka, setAiTerbuka] = useState(false);
 
   // Muat ulang setiap kali tab Tugas dibuka
   useFocusEffect(
@@ -325,7 +327,8 @@ export default function Tugas() {
       sebaran,
       berikutnya,
     };
-  }, [tugas, hariIni]);
+
+      }, [tugas, hariIni]);
 
   const tampil = d.daftar[tab].slice(0, BATAS_DAFTAR);
   const totalProgres = d.daftar.selesai.length + d.semuaBerjalan;
@@ -412,6 +415,9 @@ export default function Tugas() {
         >
           <Pressable onPress={() => setFormTerbuka(true)} style={s.tombolAqua}>
             <Text style={s.teksTombolAqua}>Tambah tugas</Text>
+          </Pressable>
+          <Pressable onPress={() => setAiTerbuka(true)} style={s.tombolGaris}>
+            <Text style={s.teksTombolGaris}>Tambah dengan AI</Text>
           </Pressable>
         </View>
       </View>
@@ -565,6 +571,11 @@ export default function Tugas() {
         onSimpan={tambahDenganToast}
       />
 
+      <FormAI
+        terbuka={aiTerbuka}
+        onTutup={() => setAiTerbuka(false)}
+        onTersimpan={muat}
+      />
       {tugasEdit ? (
         <FormTugas
           key={tugasEdit.id}
@@ -675,6 +686,15 @@ const s = StyleSheet.create({
   },
   tombolPenuh: { alignSelf: "stretch", marginTop: 16, alignItems: "center" },
   teksTombolAqua: { fontSize: 14, fontWeight: "600", color: C.ink },
+  tombolGaris: {
+    alignSelf: "flex-start",
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: C.line,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+  },
+  teksTombolGaris: { fontSize: 14, fontWeight: "600", color: C.snow },
 
   tenggatJudul: {
     marginTop: 12,
