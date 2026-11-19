@@ -71,6 +71,7 @@ function Navigasi() {
       <Stack.Protected guard={!!session}>
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="pengaturan" />
+        <Stack.Screen name="tujuan/[id]" />
       </Stack.Protected>
       <Stack.Protected guard={!session}>
         <Stack.Screen name="masuk" />
