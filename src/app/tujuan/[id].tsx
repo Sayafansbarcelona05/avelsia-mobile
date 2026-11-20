@@ -1,5 +1,11 @@
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useMemo, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -11,6 +17,18 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Circle } from "react-native-svg";
+import AksiTimer, {
+  type PenangananTimer,
+} from "../../components/belajar/aksi-timer";
+import AlarmSesi, {
+  type InfoAlarm,
+} from "../../components/belajar/alarm-sesi";
+import FormSesi, {
+  type KonfigFormSesi,
+} from "../../components/belajar/form-sesi";
+import FormTopik, {
+  type KonfigFormTopik,
+} from "../../components/belajar/form-topik";
 import {
   IkonBawah,
   IkonBuku,
@@ -23,8 +41,32 @@ import {
   IkonTanda,
 } from "../../components/belajar/ikon";
 import LatarGradien from "../../components/belajar/latar-gradien";
+import MenuSesi, {
+  type KelolaSesi,
+} from "../../components/belajar/menu-sesi";
+import MenuTopik, {
+  type KelolaTopik,
+} from "../../components/belajar/menu-topik";
 import { C } from "../../components/dashboard/panel-kartu";
+import { toast, WadahToast } from "../../components/toast";
+import { useAuth } from "../../lib/auth";
 import { formatTanggalPendek } from "../../lib/belajar";
+import {
+  buatSesi,
+  buatTopik,
+  geserTopik,
+  hapusSesi,
+  hapusTopik,
+  hentikanTimer,
+  mulaiTimer,
+  ubahSesi,
+  ubahStatusSesi,
+  ubahStatusTopik,
+  ubahTopik,
+  type HasilBelajar,
+  type MasukanSesi,
+  type MasukanTopik,
+} from "../../lib/belajar-aksi";
 import {
   hitungAktivitas,
   hitungDetail,
@@ -248,13 +290,17 @@ function PilBuka({ buka }: { buka: boolean }) {
 function BarisAnak({
   a,
   nomor,
+  jumlah,
   warna,
   hariIni,
+  onKelola,
 }: {
   a: NodeAnak;
   nomor: number;
+  jumlah: number;
   warna: string;
   hariIni: string;
+  onKelola: (k: KelolaTopik) => void;
 }) {
   const [buka, setBuka] = useState(false);
   const st = a.topik.study_status;
@@ -289,8 +335,26 @@ function BarisAnak({
         </View>
       </Pressable>
       {buka ? (
-        <View style={s.isiAnak}>
+        <View style={[s.isiAnak, { gap: 12 }]}>
           <ChipJadwal jadwal={a.jadwal} hariIni={hariIni} />
+          <Pressable
+            onPress={() =>
+              onKelola({
+                id: a.topik.id,
+                judul: a.topik.title,
+                status: st,
+                punyaAnak: false,
+                subtopik: true,
+                pertama: nomor === 1,
+                terakhir: nomor === jumlah,
+                estimasiSendiri: a.topik.estimated_minutes,
+              })
+            }
+            accessibilityRole="button"
+            style={s.tombolKelola}
+          >
+            <Text style={s.teksKelola}>Kelola sub topik</Text>
+          </Pressable>
         </View>
       ) : null}
     </View>
@@ -300,11 +364,15 @@ function BarisAnak({
 function KartuTopik({
   n,
   nomor,
+  jumlah,
   hariIni,
+  onKelola,
 }: {
   n: NodeTopik;
   nomor: number;
+  jumlah: number;
   hariIni: string;
+  onKelola: (k: KelolaTopik) => void;
 }) {
   const [buka, setBuka] = useState(n.status === "in_progress");
   const warna = WARNA_TOPIK[(nomor - 1) % WARNA_TOPIK.length];
@@ -358,6 +426,24 @@ function KartuTopik({
       {buka ? (
         <View style={s.isiTopik}>
           <ChipJadwal jadwal={n.jadwal} hariIni={hariIni} />
+          <Pressable
+            onPress={() =>
+              onKelola({
+                id: n.topik.id,
+                judul: n.topik.title,
+                status: n.status,
+                punyaAnak: n.anak.length > 0,
+                subtopik: false,
+                pertama: nomor === 1,
+                terakhir: nomor === jumlah,
+                estimasiSendiri: n.topik.estimated_minutes,
+              })
+            }
+            accessibilityRole="button"
+            style={s.tombolKelola}
+          >
+            <Text style={s.teksKelola}>Kelola topik</Text>
+          </Pressable>
           {n.anak.length > 0 ? (
             <Bagian judul={`SUB TOPIK (${n.anak.length})`}>
               {n.anak.map((a, j) => (
@@ -365,8 +451,10 @@ function KartuTopik({
                   key={a.topik.id}
                   a={a}
                   nomor={j + 1}
+                  jumlah={n.anak.length}
                   warna={warna}
                   hariIni={hariIni}
+                  onKelola={onKelola}
                 />
               ))}
             </Bagian>
@@ -382,9 +470,13 @@ function KartuTopik({
 function BarisSesi({
   x,
   namaLengkap,
+  onKelola,
+  timer,
 }: {
   x: SesiDetail;
   namaLengkap: Map<string, string>;
+  onKelola: (k: KelolaSesi) => void;
+  timer: PenangananTimer;
 }) {
   const berjalan = x.status === "running";
   const [buka, setBuka] = useState(berjalan);
@@ -453,6 +545,32 @@ function BarisSesi({
             </View>
             <Text style={[s.tebal, { color: w, fontSize: 12 }]}>{persen}%</Text>
           </View>
+          <AksiTimer
+            x={x}
+            timer={timer}
+            ringkas={`${formatTanggalPendek(x.session_date)}${nama ? ` · ${nama}` : ""}`}
+          />
+          <Pressable
+            onPress={() =>
+              onKelola({
+                id: x.id,
+                ringkas: `${formatTanggalPendek(x.session_date)}${nama ? ` · ${nama}` : ""}`,
+                status: x.status,
+                adaJeda: x.elapsed_seconds > 0,
+                topic_id: x.topic_id,
+                session_date: x.session_date,
+                start_time: x.start_time,
+                planned_minutes: x.planned_minutes,
+                actual_minutes: x.actual_minutes,
+                notes: x.notes,
+                namaTopik: nama ?? null,
+              })
+            }
+            accessibilityRole="button"
+            style={s.tombolKelola}
+          >
+            <Text style={s.teksKelola}>Kelola sesi</Text>
+          </Pressable>
         </View>
       ) : null}
     </View>
@@ -463,11 +581,15 @@ function GrupSesi({
   judul,
   items,
   namaLengkap,
+  onKelola,
+  timer,
   lipat,
 }: {
   judul: string;
   items: SesiDetail[];
   namaLengkap: Map<string, string>;
+  onKelola: (k: KelolaSesi) => void;
+  timer: PenangananTimer;
   lipat?: boolean;
 }) {
   const [terbuka, setTerbuka] = useState(!lipat);
@@ -501,7 +623,13 @@ function GrupSesi({
       {terbuka ? (
         <View style={{ gap: 8 }}>
           {tampil.map((x) => (
-            <BarisSesi key={x.id} x={x} namaLengkap={namaLengkap} />
+            <BarisSesi
+              key={x.id}
+              x={x}
+              namaLengkap={namaLengkap}
+              onKelola={onKelola}
+              timer={timer}
+            />
           ))}
           {sisa > 0 ? (
             <Pressable
@@ -539,6 +667,73 @@ export default function DetailTujuan() {
     segarkan,
   } = useDetailTujuan(id);
   const [tab, setTab] = useState<"topik" | "sesi">("topik");
+
+  const { session } = useAuth();
+  const idUser = session?.user.id ?? "";
+  const [formTopik, setFormTopik] = useState<KonfigFormTopik | null>(null);
+  const [menuTopik, setMenuTopik] = useState<KelolaTopik | null>(null);
+  // Dipakai untuk membuka form setelah panel menu selesai menutup
+  const setelahMenuTutup = useRef<(() => void) | null>(null);
+
+  async function hasilAksi(hasil: HasilBelajar): Promise<HasilBelajar> {
+    if (hasil.ok) {
+      toast.sukses(hasil.pesan);
+      await muat();
+    }
+    return hasil;
+  }
+
+  async function simpanTopik(n: MasukanTopik): Promise<HasilBelajar> {
+    const kf = formTopik;
+    if (!kf || !tujuan) {
+      return { ok: false, pesan: "Terjadi kesalahan. Coba lagi." };
+    }
+    if (kf.mode === "edit") {
+      return hasilAksi(await ubahTopik(idUser, kf.topik.id, n));
+    }
+    return hasilAksi(
+      await buatTopik(
+        idUser,
+        tujuan.id,
+        kf.mode === "sub" ? kf.induk.id : null,
+        n
+      )
+    );
+  }
+
+  const [formSesi, setFormSesi] = useState<KonfigFormSesi | null>(null);
+  const [menuSesi, setMenuSesi] = useState<KelolaSesi | null>(null);
+  const setelahMenuSesiTutup = useRef<(() => void) | null>(null);
+
+  async function simpanSesi(n: MasukanSesi): Promise<HasilBelajar> {
+    const kf = formSesi;
+    if (!kf || !tujuan) {
+      return { ok: false, pesan: "Terjadi kesalahan. Coba lagi." };
+    }
+    if (kf.mode === "edit") {
+      return hasilAksi(await ubahSesi(idUser, kf.sesi.id, n));
+    }
+    return hasilAksi(await buatSesi(idUser, tujuan.id, n));
+  }
+
+  const [alarm, setAlarm] = useState<InfoAlarm | null>(null);
+
+  const timer: PenangananTimer = {
+    alarm: setAlarm,
+    mulai: async (id) => hasilAksi(await mulaiTimer(idUser, id)),
+    hentikan: async (id, selesai) =>
+      hasilAksi(await hentikanTimer(idUser, id, selesai)),
+  };
+
+  function bukaFormSesiSetelahMenu(konfig: KonfigFormSesi) {
+    setelahMenuSesiTutup.current = () => setFormSesi(konfig);
+    setMenuSesi(null);
+  }
+
+  function bukaFormSetelahMenu(konfig: KonfigFormTopik) {
+    setelahMenuTutup.current = () => setFormTopik(konfig);
+    setMenuTopik(null);
+  }
 
   useFocusEffect(
     useCallback(() => {
@@ -769,11 +964,18 @@ export default function DetailTujuan() {
               Tiap topik menunjukkan progres belajarmu. Tekan &quot;Lihat
               detail&quot; untuk membuka sub topik dan jadwalnya.
             </Text>
+            <Pressable
+              onPress={() => setFormTopik({ mode: "tambah" })}
+              accessibilityRole="button"
+              style={s.tombolTambah}
+            >
+              <Text style={s.teksTambah}>Tambah topik</Text>
+            </Pressable>
             {r.pohon.length === 0 ? (
               <View style={s.kosong}>
                 <Text style={s.teksKosong}>Belum ada topik.</Text>
                 <Text style={s.redup}>
-                  Topik ditambahkan dari halaman web atau di langkah berikutnya.
+                  Tekan &quot;Tambah topik&quot; untuk memulai.
                 </Text>
               </View>
             ) : (
@@ -783,7 +985,9 @@ export default function DetailTujuan() {
                     key={n.topik.id}
                     n={n}
                     nomor={i + 1}
+                    jumlah={r.pohon.length}
                     hariIni={hariIni}
+                    onKelola={setMenuTopik}
                   />
                 ))}
               </View>
@@ -795,6 +999,13 @@ export default function DetailTujuan() {
             <Text style={s.kecil}>
               Catatan waktu belajar kamu. Ketuk sebuah sesi untuk detailnya.
             </Text>
+            <Pressable
+              onPress={() => setFormSesi({ mode: "tambah" })}
+              accessibilityRole="button"
+              style={s.tombolTambah}
+            >
+              <Text style={s.teksTambah}>Tambah sesi</Text>
+            </Pressable>
             {jumlahSesi === 0 ? (
               <View style={s.kosong}>
                 <Text style={s.teksKosong}>Belum ada sesi belajar.</Text>
@@ -806,6 +1017,8 @@ export default function DetailTujuan() {
                     judul="Sedang berjalan"
                     items={r.berjalan}
                     namaLengkap={r.namaLengkap}
+                    onKelola={setMenuSesi}
+                    timer={timer}
                   />
                 ) : null}
                 {r.akanDatang.length > 0 ? (
@@ -813,6 +1026,8 @@ export default function DetailTujuan() {
                     judul="Akan datang"
                     items={r.akanDatang}
                     namaLengkap={r.namaLengkap}
+                    onKelola={setMenuSesi}
+                    timer={timer}
                   />
                 ) : null}
                 {r.riwayat.length > 0 ? (
@@ -820,6 +1035,8 @@ export default function DetailTujuan() {
                     judul="Riwayat"
                     items={r.riwayat}
                     namaLengkap={r.namaLengkap}
+                    onKelola={setMenuSesi}
+                    timer={timer}
                     lipat
                   />
                 ) : null}
@@ -836,6 +1053,95 @@ export default function DetailTujuan() {
           hariIni={hariIni}
         />
       </ScrollView>
+
+      <FormTopik
+        konfig={formTopik}
+        hariIni={hariIni}
+        onTutup={() => setFormTopik(null)}
+        onSimpan={simpanTopik}
+      />
+      <MenuTopik
+        konfig={menuTopik}
+        onTutup={() => setMenuTopik(null)}
+        onSelesaiTutup={() => {
+          const lanjut = setelahMenuTutup.current;
+          setelahMenuTutup.current = null;
+          lanjut?.();
+        }}
+        onUbahStatus={async (id, status) =>
+          hasilAksi(await ubahStatusTopik(idUser, id, status))
+        }
+        onGeser={async (id, arah) =>
+          hasilAksi(await geserTopik(idUser, tujuan.id, id, arah))
+        }
+        onHapus={async (id) => hasilAksi(await hapusTopik(idUser, id))}
+        onEdit={(k) =>
+          bukaFormSetelahMenu({
+            mode: "edit",
+            topik: {
+              id: k.id,
+              title: k.judul,
+              estimated_minutes: k.estimasiSendiri,
+            },
+            punyaAnak: k.punyaAnak,
+            subtopik: k.subtopik,
+          })
+        }
+        onTambahSub={(k) =>
+          bukaFormSetelahMenu({
+            mode: "sub",
+            induk: {
+              id: k.id,
+              judul: k.judul,
+              estimasiSendiri: k.estimasiSendiri,
+            },
+          })
+        }
+      />
+      <FormSesi
+        konfig={formSesi}
+        topik={
+          formSesi?.mode === "edit"
+            ? r.opsiTopik
+            : r.opsiTopik.filter(
+                (o) => o.estimasi == null || o.dipelajari < o.estimasi
+              )
+        }
+        hariIni={hariIni}
+        onTutup={() => setFormSesi(null)}
+        onSimpan={simpanSesi}
+      />
+      <MenuSesi
+        konfig={menuSesi}
+        onTutup={() => setMenuSesi(null)}
+        onSelesaiTutup={() => {
+          const lanjut = setelahMenuSesiTutup.current;
+          setelahMenuSesiTutup.current = null;
+          lanjut?.();
+        }}
+        onUbahStatus={async (id, status) =>
+          hasilAksi(await ubahStatusSesi(idUser, id, status))
+        }
+        onHapus={async (id) => hasilAksi(await hapusSesi(idUser, id))}
+        onEdit={(k) =>
+          bukaFormSesiSetelahMenu({
+            mode: "edit",
+            sesi: {
+              id: k.id,
+              topic_id: k.topic_id,
+              session_date: k.session_date,
+              start_time: k.start_time,
+              planned_minutes: k.planned_minutes,
+              actual_minutes: k.actual_minutes,
+              status: k.status,
+              notes: k.notes,
+            },
+            namaTopikSekarang: k.namaTopik,
+          })
+        }
+      />
+      <AlarmSesi alarm={alarm} onMatikan={() => setAlarm(null)} />
+      <WadahToast atas={insets.top + 8} />
     </View>
   );
 }
@@ -1292,6 +1598,24 @@ const s = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.04)",
   },
   nilaiInfo: { fontSize: 14, fontWeight: "600", color: C.snow },
+  tombolTambah: {
+    minHeight: 46,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 10,
+    borderRadius: 999,
+    backgroundColor: C.aqua,
+  },
+  teksTambah: { fontSize: 14, fontWeight: "600", color: C.ink },
+  tombolKelola: {
+    minHeight: 42,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: C.line,
+  },
+  teksKelola: { fontSize: 13, fontWeight: "600", color: C.snow },
   tombolLebih: {
     alignItems: "center",
     paddingVertical: 10,

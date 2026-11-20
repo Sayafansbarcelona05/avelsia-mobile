@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useSyncExternalStore } from "react";
 import {
-    Animated,
-    Easing,
-    Pressable,
-    StyleSheet,
-    Text,
-    View,
+  Animated,
+  Easing,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
 } from "react-native";
 import Svg, { Path } from "react-native-svg";
 import { C } from "./dashboard/panel-kartu";
@@ -152,11 +152,14 @@ function ItemToast({ item }: { item: Item }) {
 }
 
 /* Pasang satu kali di layar. Tidak menampilkan apa pun kalau tidak ada toast. */
-export function WadahToast() {
+export function WadahToast({ atas }: { atas?: number }) {
   const isi = useSyncExternalStore(langganan, ambil, ambil);
   if (isi.length === 0) return null;
   return (
-    <View pointerEvents="box-none" style={s.wadah}>
+    <View
+      pointerEvents="box-none"
+      style={[s.wadah, atas !== undefined && { top: atas }]}
+    >
       {isi.map((t) => (
         <ItemToast key={t.id} item={t} />
       ))}

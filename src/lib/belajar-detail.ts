@@ -50,8 +50,19 @@ export type NodeTopik = {
   jadwal: JadwalSesi[];
 };
 
+// Pilihan topik di form sesi: topik tanpa sub topik, atau sub topik.
+// "grup" berisi judul topik induk kalau ini sub topik.
+export type OpsiTopikSesi = {
+  id: string;
+  title: string;
+  grup: string | null;
+  estimasi: number | null;
+  dipelajari: number;
+};
+
 export type RingkasanDetail = {
   pohon: NodeTopik[];
+  opsiTopik: OpsiTopikSesi[];
   selesai: number;
   persenSelesai: number;
   totalMenit: number;
@@ -184,8 +195,32 @@ export function hitungDetail(
     ])
   );
 
+  const opsiTopik: OpsiTopikSesi[] = [];
+  for (const n of pohon) {
+    if (n.anak.length === 0) {
+      opsiTopik.push({
+        id: n.topik.id,
+        title: n.topik.title,
+        grup: null,
+        estimasi: n.topik.estimated_minutes,
+        dipelajari: n.dip,
+      });
+    } else {
+      for (const a of n.anak) {
+        opsiTopik.push({
+          id: a.topik.id,
+          title: a.topik.title,
+          grup: n.topik.title,
+          estimasi: a.topik.estimated_minutes,
+          dipelajari: a.dip,
+        });
+      }
+    }
+  }
+
   return {
     pohon,
+    opsiTopik,
     selesai,
     persenSelesai,
     totalMenit,

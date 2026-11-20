@@ -1,5 +1,11 @@
 import { useFocusEffect, useRouter } from "expo-router";
-import { useCallback, useMemo, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -9,6 +15,9 @@ import {
   Text,
   View,
 } from "react-native";
+import FormTujuan, {
+  type KonfigFormTujuan,
+} from "../../components/belajar/form-tujuan";
 import {
   IkonApi,
   IkonBuku,
@@ -18,13 +27,26 @@ import {
   IkonPanah,
 } from "../../components/belajar/ikon";
 import LatarGradien from "../../components/belajar/latar-gradien";
+import MenuTujuan, {
+  type KelolaTujuan,
+} from "../../components/belajar/menu-tujuan";
 import { C } from "../../components/dashboard/panel-kartu";
+import { toast, WadahToast } from "../../components/toast";
+import { useAuth } from "../../lib/auth";
 import {
   formatTanggalPendek,
   hitungBelajar,
   JUMLAH_MINGGU,
   useBelajar,
 } from "../../lib/belajar";
+import {
+  buatTujuan,
+  hapusTujuan,
+  ubahStatusTujuan,
+  ubahTujuan,
+  type HasilBelajar,
+  type MasukanTujuan,
+} from "../../lib/belajar-aksi";
 import { formatMenit } from "../../lib/format";
 
 const TAB = [
@@ -57,6 +79,57 @@ export default function Belajar() {
   const [tabAktif, setTabAktif] = useState<(typeof TAB)[number]["kunci"]>(
     "aktif"
   );
+
+  const { session } = useAuth();
+  const userId = session?.user.id ?? "";
+  const [formTujuan, setFormTujuan] = useState<KonfigFormTujuan | null>(null);
+  const [menuTujuan, setMenuTujuan] = useState<KelolaTujuan | null>(null);
+  const setelahMenuTutup = useRef<(() => void) | null>(null);
+
+  async function simpanTujuan(n: MasukanTujuan): Promise<HasilBelajar> {
+    const kf = formTujuan;
+    if (!kf) return { ok: false, pesan: "Form tertutup. Coba lagi." };
+    const hasil =
+      kf.mode === "edit"
+        ? await ubahTujuan(userId, kf.tujuan.id, n)
+        : await buatTujuan(userId, n);
+    if (hasil.ok) {
+      toast.sukses(
+        kf.mode === "edit"
+          ? "Tujuan berhasil diperbarui"
+          : "Tujuan berhasil ditambahkan"
+      );
+      muat();
+    }
+    return hasil;
+  }
+
+  async function gantiStatusTujuan(
+    id: string,
+    status: string
+  ): Promise<HasilBelajar> {
+    const hasil = await ubahStatusTujuan(userId, id, status);
+    if (hasil.ok) {
+      toast.sukses(
+        status === "completed"
+          ? "Tujuan ditandai selesai"
+          : status === "archived"
+            ? "Tujuan diarsipkan"
+            : "Tujuan diaktifkan kembali"
+      );
+      muat();
+    }
+    return hasil;
+  }
+
+  async function hapusTujuanIni(id: string): Promise<HasilBelajar> {
+    const hasil = await hapusTujuan(userId, id);
+    if (hasil.ok) {
+      toast.sukses("Tujuan berhasil dihapus");
+      muat();
+    }
+    return hasil;
+  }
 
   useFocusEffect(
     useCallback(() => {
@@ -101,6 +174,7 @@ export default function Belajar() {
   const daftar = data.tujuan.filter((g) => g.status === tabSekarang.status);
 
   return (
+    <>
     <ScrollView
       style={{ flex: 1 }}
       contentContainerStyle={s.isi}
@@ -113,11 +187,20 @@ export default function Belajar() {
         />
       }
     >
-      <View>
-        <Text style={s.judul}>Belajar</Text>
-        <Text style={s.redup}>
-          Susun tujuan belajar, pecah jadi topik, lalu catat sesinya.
-        </Text>
+      <View style={s.kepalaHalaman}>
+        <View style={{ flex: 1 }}>
+          <Text style={s.judul}>Belajar</Text>
+          <Text style={s.redup}>
+            Susun tujuan belajar, pecah jadi topik, lalu catat sesinya.
+          </Text>
+        </View>
+        <Pressable
+          onPress={() => setFormTujuan({ mode: "tambah" })}
+          accessibilityRole="button"
+          style={({ pressed }) => [s.tombolTambah, pressed && { opacity: 0.8 }]}
+        >
+          <Text style={s.teksTombolTambah}>Tambah tujuan</Text>
+        </Pressable>
       </View>
 
       {/* Ringkasan: satu kartu, tiga baris berikon */}
@@ -233,7 +316,25 @@ export default function Belajar() {
                     </Text>
                   </View>
                 ) : null}
-                <View style={{ marginLeft: "auto" }}>
+                <View style={s.sisiKanan}>
+                  <Pressable
+                    onPress={() =>
+                      setMenuTujuan({
+                        id: g.id,
+                        judul: g.title,
+                        status: g.status,
+                      })
+                    }
+                    hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Kelola tujuan ${g.title}`}
+                    style={({ pressed }) => [
+                      s.tombolKelola,
+                      pressed && { opacity: 0.8 },
+                    ]}
+                  >
+                    <Text style={s.teksKelola}>Kelola</Text>
+                  </Pressable>
                   <IkonPanah warna={C.mist} ukuran={16} />
                 </View>
               </View>
@@ -356,6 +457,33 @@ export default function Belajar() {
         </View>
       </View>
     </ScrollView>
+
+    <FormTujuan
+      konfig={formTujuan}
+      hariIni={hariIni}
+      onTutup={() => setFormTujuan(null)}
+      onSimpan={simpanTujuan}
+    />
+    <MenuTujuan
+      konfig={menuTujuan}
+      onTutup={() => setMenuTujuan(null)}
+      onSelesaiTutup={() => {
+        const lanjut = setelahMenuTutup.current;
+        setelahMenuTutup.current = null;
+        lanjut?.();
+      }}
+      onUbahStatus={gantiStatusTujuan}
+      onHapus={hapusTujuanIni}
+      onEdit={(k) => {
+        const g = data.tujuan.find((x) => x.id === k.id);
+        if (!g) return;
+        setelahMenuTutup.current = () =>
+          setFormTujuan({ mode: "edit", tujuan: g });
+        setMenuTujuan(null);
+      }}
+    />
+      <WadahToast />
+    </>
   );
 }
 
@@ -410,6 +538,33 @@ const s = StyleSheet.create({
     backgroundColor: C.aqua,
   },
   teksTombolUlang: { fontSize: 14, fontWeight: "600", color: C.ink },
+
+  kepalaHalaman: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+  },
+  tombolTambah: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 999,
+    backgroundColor: C.aqua,
+  },
+  teksTombolTambah: { fontSize: 13, fontWeight: "600", color: C.ink },
+  sisiKanan: {
+    marginLeft: "auto",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  tombolKelola: {
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: C.line,
+  },
+  teksKelola: { fontSize: 12, fontWeight: "500", color: C.snow },
 
   kartuRingkas: {
     borderRadius: 16,
