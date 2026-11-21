@@ -721,8 +721,11 @@ export default function DetailTujuan() {
   const timer: PenangananTimer = {
     alarm: setAlarm,
     mulai: async (id) => hasilAksi(await mulaiTimer(idUser, id)),
-    hentikan: async (id, selesai) =>
-      hasilAksi(await hentikanTimer(idUser, id, selesai)),
+    hentikan: async (id, selesai) => {
+      const hasil = await hasilAksi(await hentikanTimer(idUser, id, selesai));
+      if (!hasil.ok) await muat();
+      return hasil;
+    },
   };
 
   function bukaFormSesiSetelahMenu(konfig: KonfigFormSesi) {

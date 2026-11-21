@@ -1,4 +1,6 @@
+import { batalkanAlarmJam, setelAlarmJam } from "./alarm-jam";
 import { jamValid, tanggalValid } from "./kalender-waktu";
+import { batalkanPengingat, jadwalkanPengingat } from "./pengingat-sesi";
 import { supabase } from "./supabase";
 
 export type HasilBelajar = { ok: boolean; pesan: string };
@@ -525,6 +527,7 @@ export async function hapusSesi(
   if (!data || data.length === 0) {
     return { ok: false, pesan: "Sesi tidak ditemukan atau tidak bisa dihapus." };
   }
+  await batalkanPengingat(id);
   return { ok: true, pesan: "Sesi dihapus." };
 }
 
@@ -547,6 +550,43 @@ function pesanTimer(error: { code?: string; message?: string }): string {
   return "Timer gagal diproses. Coba lagi.";
 }
 
+type GalatRpc = { code?: string; message?: string } | null;
+
+// Panggilan dibatasi 8 detik dan dicoba sampai 3 kali (jeda 1,5 detik), supaya
+// tombol tidak terkunci kalau koneksi basi setelah app kembali dari latar belakang
+async function panggilRpc(
+  nama: string,
+  args: Record<string, unknown>
+): Promise<{ terkirim: boolean; galat: GalatRpc; diulang: boolean }> {
+  let diulang = false;
+  for (let percobaan = 1; percobaan <= 3; percobaan++) {
+    if (percobaan > 1) await new Promise((r) => setTimeout(r, 1500));
+    const batas = new AbortController();
+    const pewaktu = setTimeout(() => batas.abort(), 8000);
+    try {
+      const r = await supabase.rpc(nama, args).abortSignal(batas.signal);
+      if (
+        r.error &&
+        /abort|network|fetch|timeout/i.test(r.error.message ?? "")
+      ) {
+        diulang = true;
+        continue;
+      }
+      return { terkirim: true, galat: r.error, diulang };
+    } catch {
+      diulang = true;
+    } finally {
+      clearTimeout(pewaktu);
+    }
+  }
+  return { terkirim: false, galat: null, diulang };
+}
+
+const GALAT_JARINGAN: HasilBelajar = {
+  ok: false,
+  pesan: "Terjadi gangguan jaringan. Coba lagi.",
+};
+
 export async function mulaiTimer(
   userId: string,
   id: string
@@ -554,12 +594,34 @@ export async function mulaiTimer(
   if (!userId) return SESI_BERAKHIR;
   if (!id) return { ok: false, pesan: "Sesi tidak ditemukan." };
 
-  const { error } = await supabase.rpc("mulai_timer_sesi", { p_id: id });
-  if (error) return { ok: false, pesan: pesanTimer(error) };
+  const { terkirim, galat, diulang } = await panggilRpc("mulai_timer_sesi", {
+    p_id: id,
+  });
+  if (!terkirim) return GALAT_JARINGAN;
+  // Pada percobaan ulang, percobaan pertama mungkin sudah sampai ke database
+  const sudahJalan =
+    diulang && !!galat?.message?.includes("SESI_TIDAK_BISA_DIMULAI");
+  if (galat && !sudahJalan) return { ok: false, pesan: pesanTimer(galat) };
+
+  // Jadwalkan notifikasi tepat saat rencana habis (berbunyi walau app ditutup)
+  const { data: sesi } = await supabase
+    .from("study_sessions")
+    .select("planned_minutes, elapsed_seconds")
+    .eq("id", id)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (sesi && sesi.planned_minutes) {
+    const sisa =
+      (sesi.planned_minutes as number) * 60 -
+      ((sesi.elapsed_seconds as number) ?? 0);
+    void jadwalkanPengingat(id, sisa, sesi.planned_minutes as number);
+    void setelAlarmJam(sisa, "Waktu belajar selesai");
+  }
+
   return { ok: true, pesan: "Timer dimulai." };
 }
 
-export async function hentikanTimer(
+async function hentikanTimerInti(
   userId: string,
   id: string,
   selesai: boolean
@@ -567,23 +629,69 @@ export async function hentikanTimer(
   if (!userId) return SESI_BERAKHIR;
   if (!id) return { ok: false, pesan: "Sesi tidak ditemukan." };
 
-  const { error } = await supabase.rpc("hentikan_timer_sesi", {
+  const { terkirim, galat, diulang } = await panggilRpc("hentikan_timer_sesi", {
     p_id: id,
     p_selesai: selesai,
   });
-  if (error) return { ok: false, pesan: pesanTimer(error) };
+  if (!terkirim) return GALAT_JARINGAN;
+  // Pada percobaan ulang, percobaan pertama mungkin sudah sampai ke database
+  const sudahBerhenti =
+    diulang && !!galat?.message?.includes("SESI_TIDAK_BERJALAN");
+  if (galat && !sudahBerhenti) return { ok: false, pesan: pesanTimer(galat) };
+
+  const { data: cek } = await supabase
+    .from("study_sessions")
+    .select("elapsed_seconds, planned_minutes, topic_id")
+    .eq("id", id)
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  // Waktu rencana sudah habis: biarkan notifikasinya berbunyi.
+  // Dihentikan lebih awal: batalkan.
+  const rencanaDetik = cek?.planned_minutes
+    ? (cek.planned_minutes as number) * 60
+    : null;
+  const habis =
+    rencanaDetik !== null &&
+    ((cek?.elapsed_seconds as number) ?? 0) >= rencanaDetik - 15;
+  if (!habis) {
+    void batalkanPengingat(id);
+    void batalkanAlarmJam();
+  }
 
   if (selesai) {
-    const { data: sesiIni } = await supabase
-      .from("study_sessions")
-      .select("topic_id")
-      .eq("id", id)
-      .eq("user_id", userId)
-      .maybeSingle();
-    await tandaiSedangDipelajari((sesiIni?.topic_id as string | null) ?? null);
+    await tandaiSedangDipelajari((cek?.topic_id as string | null) ?? null);
   }
 
   return { ok: true, pesan: selesai ? "Sesi selesai." : "Timer dijeda." };
+}
+
+const sedangDihentikan = new Set<string>();
+
+// Penghentian otomatis dan tombol Selesai bisa terpanggil bersamaan; yang kedua diabaikan
+export async function hentikanTimer(
+  userId: string,
+  id: string,
+  selesai: boolean
+): Promise<HasilBelajar> {
+  if (sedangDihentikan.has(id)) {
+    return { ok: true, pesan: selesai ? "Sesi selesai." : "Timer dijeda." };
+  }
+  sedangDihentikan.add(id);
+  try {
+    const hasil = await Promise.race([
+      hentikanTimerInti(userId, id, selesai),
+      new Promise<HasilBelajar>((lepas) =>
+        setTimeout(
+          () => lepas({ ok: false, pesan: "Koneksi lambat. Coba lagi." }),
+          30000
+        )
+      ),
+    ]);
+    return hasil;
+  } finally {
+    sedangDihentikan.delete(id);
+  }
 }
 
 /* ====== Tujuan belajar ====== */
