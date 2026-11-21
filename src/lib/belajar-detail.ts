@@ -247,6 +247,7 @@ export function useDetailTujuan(id: string | undefined) {
   const [tujuan, setTujuan] = useState<Tujuan | null>(null);
   const [topik, setTopik] = useState<Topik[]>([]);
   const [sesi, setSesi] = useState<SesiDetail[]>([]);
+  const [lulus, setLulus] = useState<string[]>([]);
   const [memuat, setMemuat] = useState(true);
   const [menyegarkan, setMenyegarkan] = useState(false);
   const [galat, setGalat] = useState(false);
@@ -264,7 +265,7 @@ export function useDetailTujuan(id: string | undefined) {
         .maybeSingle();
       const zona = prefs?.timezone ?? "Asia/Jakarta";
 
-      const [hasilTujuan, hasilTopik, hasilSesi] = await Promise.all([
+      const [hasilTujuan, hasilTopik, hasilSesi, hasilLulus] = await Promise.all([
         supabase
           .from("learning_goals")
           .select(
@@ -289,6 +290,12 @@ export function useDetailTujuan(id: string | undefined) {
           .eq("user_id", idUser)
           .order("session_date", { ascending: false })
           .order("created_at", { ascending: false }),
+        supabase
+          .from("learning_quizzes")
+          .select("topic_id")
+          .eq("goal_id", id)
+          .eq("user_id", idUser)
+          .eq("status", "passed"),
       ]);
 
       if (hasilTujuan.error || hasilTopik.error || hasilSesi.error) {
@@ -306,6 +313,7 @@ export function useDetailTujuan(id: string | undefined) {
         setTujuan(hasilTujuan.data as Tujuan);
         setTopik((hasilTopik.data ?? []) as Topik[]);
         setSesi((hasilSesi.data ?? []) as SesiDetail[]);
+        setLulus((hasilLulus.data ?? []).map((x) => x.topic_id as string));
       }
       setGalat(false);
     } catch {
@@ -326,6 +334,7 @@ export function useDetailTujuan(id: string | undefined) {
     tujuan,
     topik,
     sesi,
+    lulus,
     memuat,
     menyegarkan,
     galat,

@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import {
-    ActivityIndicator,
-    Pressable,
-    StyleSheet,
-    Text,
-    View,
+  ActivityIndicator,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
 } from "react-native";
 import type { HasilBelajar } from "../../lib/belajar-aksi";
 import { C, TagTitik } from "../dashboard/panel-kartu";
@@ -19,6 +19,8 @@ export type KelolaTopik = {
   pertama: boolean; // paling atas di antara saudaranya
   terakhir: boolean; // paling bawah di antara saudaranya
   estimasiSendiri: number | null;
+  bisaTes?: boolean; // tanpa sub topik dan sudah punya sesi selesai
+  sudahLulus?: boolean;
 };
 
 type Gaya = "utama" | "garis" | "teks";
@@ -88,6 +90,7 @@ export default function MenuTopik({
   onHapus,
   onEdit,
   onTambahSub,
+  onMulaiTes,
 }: {
   konfig: KelolaTopik | null;
   onTutup: () => void;
@@ -97,6 +100,7 @@ export default function MenuTopik({
   onHapus: (id: string) => Promise<HasilBelajar>;
   onEdit: (k: KelolaTopik) => void;
   onTambahSub: (k: KelolaTopik) => void;
+  onMulaiTes?: (k: KelolaTopik) => void;
 }) {
   // "item" menyimpan topik terakhir supaya isi panel tetap ada saat animasi tutup
   const [item, setItem] = useState<KelolaTopik | null>(konfig);
@@ -224,7 +228,10 @@ export default function MenuTopik({
                     </Text>
                   ) : (
                     <>
-                      {PILIHAN_STATUS.map((st) => (
+                      {(data.sudahLulus
+                        ? [...PILIHAN_STATUS, "done"]
+                        : [...PILIHAN_STATUS]
+                      ).map((st) => (
                         <Tombol
                           key={st}
                           label={LABEL_STATUS[st]}
@@ -236,10 +243,22 @@ export default function MenuTopik({
                           }
                         />
                       ))}
+                      {data.bisaTes && !data.sudahLulus && onMulaiTes ? (
+                        <Tombol
+                          label={data.subtopik ? "Tes sub topik" : "Tes topik"}
+                          gaya="utama"
+                          nonaktif={proses !== null}
+                          onPress={() => onMulaiTes(data)}
+                        />
+                      ) : null}
                       <Text style={s.petunjuk}>
                         {data.status === "done"
-                          ? "Topik ini sudah selesai."
-                          : "Status Selesai diraih lewat latihan di web, belum tersedia di app."}
+                          ? `${data.subtopik ? "Sub topik" : "Topik"} ini sudah selesai.`
+                          : data.sudahLulus
+                            ? "Kamu sudah lulus tes ini."
+                            : data.bisaTes
+                              ? "Status Selesai diraih dengan lulus tes (minimal 80%)."
+                              : "Selesaikan minimal satu sesi belajar dulu untuk membuka tes."}
                       </Text>
                     </>
                   )

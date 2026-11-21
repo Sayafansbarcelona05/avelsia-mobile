@@ -72,6 +72,7 @@ function Navigasi() {
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="pengaturan" />
         <Stack.Screen name="tujuan/[id]" />
+        <Stack.Screen name="tes/[topikId]" options={{ gestureEnabled: false }} />
       </Stack.Protected>
       <Stack.Protected guard={!session}>
         <Stack.Screen name="masuk" />

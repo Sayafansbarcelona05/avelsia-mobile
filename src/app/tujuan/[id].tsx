@@ -23,6 +23,7 @@ import AksiTimer, {
 import AlarmSesi, {
   type InfoAlarm,
 } from "../../components/belajar/alarm-sesi";
+import DialogTes, { type TargetTes } from "../../components/belajar/dialog-tes";
 import FormSesi, {
   type KonfigFormSesi,
 } from "../../components/belajar/form-sesi";
@@ -659,6 +660,7 @@ export default function DetailTujuan() {
     tujuan,
     topik,
     sesi,
+    lulus,
     memuat,
     menyegarkan,
     galat,
@@ -672,6 +674,19 @@ export default function DetailTujuan() {
   const idUser = session?.user.id ?? "";
   const [formTopik, setFormTopik] = useState<KonfigFormTopik | null>(null);
   const [menuTopik, setMenuTopik] = useState<KelolaTopik | null>(null);
+  const [tesTarget, setTesTarget] = useState<TargetTes | null>(null);
+  const setelahTesTutup = useRef<(() => void) | null>(null);
+
+  // Tombol Tes: topik tanpa sub topik, sudah punya sesi selesai, belum lulus
+  function bukaMenuTopik(k: KelolaTopik) {
+    setMenuTopik({
+      ...k,
+      bisaTes:
+        !k.punyaAnak &&
+        sesi.some((x) => x.topic_id === k.id && x.status === "done"),
+      sudahLulus: lulus.includes(k.id),
+    });
+  }
   // Dipakai untuk membuka form setelah panel menu selesai menutup
   const setelahMenuTutup = useRef<(() => void) | null>(null);
 
@@ -731,6 +746,18 @@ export default function DetailTujuan() {
   function bukaFormSesiSetelahMenu(konfig: KonfigFormSesi) {
     setelahMenuSesiTutup.current = () => setFormSesi(konfig);
     setMenuSesi(null);
+  }
+
+  function bukaTesSetelahMenu(k: KelolaTopik) {
+    if (!tujuan) return;
+    setelahMenuTutup.current = () =>
+      setTesTarget({
+        topicId: k.id,
+        goalId: tujuan.id,
+        judul: k.judul,
+        kata: k.subtopik ? "sub topik" : "topik",
+      });
+    setMenuTopik(null);
   }
 
   function bukaFormSetelahMenu(konfig: KonfigFormTopik) {
@@ -990,7 +1017,7 @@ export default function DetailTujuan() {
                     nomor={i + 1}
                     jumlah={r.pohon.length}
                     hariIni={hariIni}
-                    onKelola={setMenuTopik}
+                    onKelola={bukaMenuTopik}
                   />
                 ))}
               </View>
@@ -1063,6 +1090,20 @@ export default function DetailTujuan() {
         onTutup={() => setFormTopik(null)}
         onSimpan={simpanTopik}
       />
+      <DialogTes
+        target={tesTarget}
+        onTutup={() => setTesTarget(null)}
+        onSiap={(t) => {
+          setelahTesTutup.current = () =>
+            router.push(`/tes/${t.topicId}?goalId=${t.goalId}` as never);
+          setTesTarget(null);
+        }}
+        onSelesaiTutup={() => {
+          const lanjut = setelahTesTutup.current;
+          setelahTesTutup.current = null;
+          lanjut?.();
+        }}
+      />
       <MenuTopik
         konfig={menuTopik}
         onTutup={() => setMenuTopik(null)}
@@ -1090,6 +1131,7 @@ export default function DetailTujuan() {
             subtopik: k.subtopik,
           })
         }
+        onMulaiTes={bukaTesSetelahMenu}
         onTambahSub={(k) =>
           bukaFormSetelahMenu({
             mode: "sub",
