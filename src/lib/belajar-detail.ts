@@ -248,6 +248,8 @@ export function useDetailTujuan(id: string | undefined) {
   const [topik, setTopik] = useState<Topik[]>([]);
   const [sesi, setSesi] = useState<SesiDetail[]>([]);
   const [lulus, setLulus] = useState<string[]>([]);
+  const [tesBerjalan, setTesBerjalan] = useState<string[]>([]);
+  const [tesSelesai, setTesSelesai] = useState<string[]>([]);
   const [memuat, setMemuat] = useState(true);
   const [menyegarkan, setMenyegarkan] = useState(false);
   const [galat, setGalat] = useState(false);
@@ -292,10 +294,10 @@ export function useDetailTujuan(id: string | undefined) {
           .order("created_at", { ascending: false }),
         supabase
           .from("learning_quizzes")
-          .select("topic_id")
+          .select("topic_id, status")
           .eq("goal_id", id)
           .eq("user_id", idUser)
-          .eq("status", "passed"),
+          .in("status", ["passed", "failed", "in_progress"]),
       ]);
 
       if (hasilTujuan.error || hasilTopik.error || hasilSesi.error) {
@@ -313,7 +315,22 @@ export function useDetailTujuan(id: string | undefined) {
         setTujuan(hasilTujuan.data as Tujuan);
         setTopik((hasilTopik.data ?? []) as Topik[]);
         setSesi((hasilSesi.data ?? []) as SesiDetail[]);
-        setLulus((hasilLulus.data ?? []).map((x) => x.topic_id as string));
+        const kuisTopik = hasilLulus.data ?? [];
+        setLulus(
+          kuisTopik
+            .filter((x) => x.status === "passed")
+            .map((x) => x.topic_id as string)
+        );
+        setTesBerjalan(
+          kuisTopik
+            .filter((x) => x.status === "in_progress")
+            .map((x) => x.topic_id as string)
+        );
+        setTesSelesai(
+          kuisTopik
+            .filter((x) => x.status !== "in_progress")
+            .map((x) => x.topic_id as string)
+        );
       }
       setGalat(false);
     } catch {
@@ -335,6 +352,8 @@ export function useDetailTujuan(id: string | undefined) {
     topik,
     sesi,
     lulus,
+    tesBerjalan,
+    tesSelesai,
     memuat,
     menyegarkan,
     galat,

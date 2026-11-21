@@ -661,6 +661,8 @@ export default function DetailTujuan() {
     topik,
     sesi,
     lulus,
+    tesBerjalan,
+    tesSelesai,
     memuat,
     menyegarkan,
     galat,
@@ -685,6 +687,8 @@ export default function DetailTujuan() {
         !k.punyaAnak &&
         sesi.some((x) => x.topic_id === k.id && x.status === "done"),
       sudahLulus: lulus.includes(k.id),
+      sedangTes: tesBerjalan.includes(k.id),
+      adaHasilTes: tesSelesai.includes(k.id),
     });
   }
   // Dipakai untuk membuka form setelah panel menu selesai menutup
@@ -746,6 +750,13 @@ export default function DetailTujuan() {
   function bukaFormSesiSetelahMenu(konfig: KonfigFormSesi) {
     setelahMenuSesiTutup.current = () => setFormSesi(konfig);
     setMenuSesi(null);
+  }
+
+  function lanjutTesSetelahMenu(k: KelolaTopik) {
+    if (!tujuan) return;
+    setelahMenuTutup.current = () =>
+      router.push(`/tes/${k.id}?goalId=${tujuan.id}` as never);
+    setMenuTopik(null);
   }
 
   function bukaTesSetelahMenu(k: KelolaTopik) {
@@ -1132,6 +1143,8 @@ export default function DetailTujuan() {
           })
         }
         onMulaiTes={bukaTesSetelahMenu}
+        onLanjutTes={lanjutTesSetelahMenu}
+        onLihatHasil={lanjutTesSetelahMenu}
         onTambahSub={(k) =>
           bukaFormSetelahMenu({
             mode: "sub",

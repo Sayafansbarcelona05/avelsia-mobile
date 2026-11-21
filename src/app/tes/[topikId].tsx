@@ -567,6 +567,19 @@ function HasilTes({
   const dihentikan = hasil.benar === null;
 
   return (
+    <>
+    <View style={s.barKembali}>
+      <Pressable
+        onPress={onKembali}
+        accessibilityRole="button"
+        accessibilityLabel="Kembali ke tujuan"
+        hitSlop={8}
+        style={({ pressed }) => [s.tombolKembali, pressed && { opacity: 0.7 }]}
+      >
+        <Text style={s.panahKembali}>‹</Text>
+        <Text style={s.teksKembali}>Kembali</Text>
+      </Pressable>
+    </View>
     <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 32 + bawah, gap: 14 }}>
       <View style={s.kepala}>
         <Text style={s.kecil}>HASIL TES</Text>
@@ -657,12 +670,32 @@ function HasilTes({
           })}
         </>
       ) : null}
+      <View style={{ marginTop: 4 }}>
+        <Tombol label="Kembali ke tujuan" gaya="garis" onPress={onKembali} />
+      </View>
     </ScrollView>
+    </>
   );
 }
 
 const s = StyleSheet.create({
   layar: { flex: 1, backgroundColor: C.ink },
+  barKembali: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: C.line,
+  },
+  tombolKembali: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    gap: 4,
+    minHeight: 44,
+    paddingHorizontal: 12,
+  },
+  panahKembali: { fontSize: 28, lineHeight: 30, color: C.snow },
+  teksKembali: { fontSize: 15, fontWeight: "600", color: C.snow },
   tengah: { flex: 1, alignItems: "center", justifyContent: "center", padding: 24, gap: 12 },
   judulTengah: { fontSize: 18, fontWeight: "600", color: C.snow, textAlign: "center" },
   teksTengah: { fontSize: 14, lineHeight: 20, color: C.mist, textAlign: "center" },

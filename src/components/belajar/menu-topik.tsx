@@ -21,6 +21,8 @@ export type KelolaTopik = {
   estimasiSendiri: number | null;
   bisaTes?: boolean; // tanpa sub topik dan sudah punya sesi selesai
   sudahLulus?: boolean;
+  sedangTes?: boolean; // ada tes yang belum dikumpulkan
+  adaHasilTes?: boolean; // pernah menyelesaikan tes (lulus atau tidak)
 };
 
 type Gaya = "utama" | "garis" | "teks";
@@ -91,6 +93,8 @@ export default function MenuTopik({
   onEdit,
   onTambahSub,
   onMulaiTes,
+  onLanjutTes,
+  onLihatHasil,
 }: {
   konfig: KelolaTopik | null;
   onTutup: () => void;
@@ -101,6 +105,8 @@ export default function MenuTopik({
   onEdit: (k: KelolaTopik) => void;
   onTambahSub: (k: KelolaTopik) => void;
   onMulaiTes?: (k: KelolaTopik) => void;
+  onLanjutTes?: (k: KelolaTopik) => void;
+  onLihatHasil?: (k: KelolaTopik) => void;
 }) {
   // "item" menyimpan topik terakhir supaya isi panel tetap ada saat animasi tutup
   const [item, setItem] = useState<KelolaTopik | null>(konfig);
@@ -243,7 +249,14 @@ export default function MenuTopik({
                           }
                         />
                       ))}
-                      {data.bisaTes && !data.sudahLulus && onMulaiTes ? (
+                      {data.sedangTes && !data.sudahLulus && onLanjutTes ? (
+                        <Tombol
+                          label="Lanjutkan tes"
+                          gaya="utama"
+                          nonaktif={proses !== null}
+                          onPress={() => onLanjutTes(data)}
+                        />
+                      ) : data.bisaTes && !data.sudahLulus && onMulaiTes ? (
                         <Tombol
                           label={data.subtopik ? "Tes sub topik" : "Tes topik"}
                           gaya="utama"
@@ -251,11 +264,21 @@ export default function MenuTopik({
                           onPress={() => onMulaiTes(data)}
                         />
                       ) : null}
+                      {data.adaHasilTes && !data.sedangTes && onLihatHasil ? (
+                        <Tombol
+                          label="Lihat hasil tes"
+                          gaya="garis"
+                          nonaktif={proses !== null}
+                          onPress={() => onLihatHasil(data)}
+                        />
+                      ) : null}
                       <Text style={s.petunjuk}>
                         {data.status === "done"
                           ? `${data.subtopik ? "Sub topik" : "Topik"} ini sudah selesai.`
                           : data.sudahLulus
                             ? "Kamu sudah lulus tes ini."
+                            : data.sedangTes
+                              ? "Tes sedang berjalan. Jawabanmu sudah tersimpan dan soal tidak dibuat ulang."
                             : data.bisaTes
                               ? "Status Selesai diraih dengan lulus tes (minimal 80%)."
                               : "Selesaikan minimal satu sesi belajar dulu untuk membuka tes."}
