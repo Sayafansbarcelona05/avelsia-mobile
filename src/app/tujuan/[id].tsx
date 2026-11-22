@@ -23,8 +23,13 @@ import AksiTimer, {
 import AlarmSesi, {
   type InfoAlarm,
 } from "../../components/belajar/alarm-sesi";
-import DaftarReferensi from "../../components/belajar/daftar-referensi";
+import DaftarReferensi, {
+  type AksiRef,
+} from "../../components/belajar/daftar-referensi";
 import DialogTes, { type TargetTes } from "../../components/belajar/dialog-tes";
+import FormReferensi, {
+  type KonfigFormReferensi,
+} from "../../components/belajar/form-referensi";
 import FormSesi, {
   type KonfigFormSesi,
 } from "../../components/belajar/form-sesi";
@@ -87,6 +92,12 @@ import {
   type SesiDetail,
 } from "../../lib/belajar-detail";
 import { formatHari, formatMenit } from "../../lib/format";
+import {
+  buatReferensi,
+  hapusReferensi,
+  ubahReferensi,
+  type MasukanReferensi,
+} from "../../lib/referensi-aksi";
 
 const BATAS_SESI = 6;
 const WARNA_TOPIK = [C.lilac, C.aqua, C.brand];
@@ -296,6 +307,7 @@ function PilBuka({ buka }: { buka: boolean }) {
 }
 
 function BarisAnak({
+  aksiRef,
   referensi,
   a,
   nomor,
@@ -306,6 +318,7 @@ function BarisAnak({
 }: {
   a: NodeAnak;
   referensi: RefTopik[];
+  aksiRef: AksiRef;
   nomor: number;
   jumlah: number;
   warna: string;
@@ -347,7 +360,12 @@ function BarisAnak({
       {buka ? (
         <View style={[s.isiAnak, { gap: 12 }]}>
           <ChipJadwal jadwal={a.jadwal} hariIni={hariIni} />
-          <DaftarReferensi items={referensi} />
+          <DaftarReferensi
+            items={referensi}
+            onTambah={() => aksiRef.tambah(a.topik.id, a.topik.title)}
+            onEdit={(r) => aksiRef.ubah(a.topik.title, r)}
+            onHapus={aksiRef.hapus}
+          />
           <Pressable
             onPress={() =>
               onKelola({
@@ -373,6 +391,7 @@ function BarisAnak({
 }
 
 function KartuTopik({
+  aksiRef,
   onPecah,
   referensi,
   n,
@@ -384,6 +403,7 @@ function KartuTopik({
   n: NodeTopik;
   referensi: Map<string, RefTopik[]>;
   onPecah: (t: TargetPecah) => void;
+  aksiRef: AksiRef;
   nomor: number;
   jumlah: number;
   hariIni: string;
@@ -459,6 +479,9 @@ function KartuTopik({
           ) : null}
           <DaftarReferensi
             items={referensi.get(n.topik.id) ?? []}
+            onTambah={() => aksiRef.tambah(n.topik.id, n.topik.title)}
+            onEdit={(r) => aksiRef.ubah(n.topik.title, r)}
+            onHapus={aksiRef.hapus}
             dariSub={n.anak.map((x) => ({
               sumber: x.topik.title,
               items: referensi.get(x.topik.id) ?? [],
@@ -489,6 +512,7 @@ function KartuTopik({
                   key={a.topik.id}
                   a={a}
                   referensi={referensi.get(a.topik.id) ?? []}
+                  aksiRef={aksiRef}
                   nomor={j + 1}
                   jumlah={n.anak.length}
                   warna={warna}
@@ -718,6 +742,8 @@ export default function DetailTujuan() {
   const [tesTarget, setTesTarget] = useState<TargetTes | null>(null);
   const [targetPecah, setTargetPecah] = useState<TargetPecah | null>(null);
   const [aiTopik, setAiTopik] = useState(false);
+  const [formReferensi, setFormReferensi] =
+    useState<KonfigFormReferensi | null>(null);
   const setelahTesTutup = useRef<(() => void) | null>(null);
 
   // Tombol Tes: topik tanpa sub topik, sudah punya sesi selesai, belum lulus
@@ -832,6 +858,26 @@ export default function DetailTujuan() {
     () => (hariIni ? hitungAktivitas(sesi, hariIni) : null),
     [sesi, hariIni]
   );
+
+  // Aksi referensi, dipakai kartu topik dan sub topik
+  const aksiRef: AksiRef = {
+    tambah: (topicId, judul) =>
+      setFormReferensi({ mode: "tambah", topicId, topikJudul: judul }),
+    ubah: (judul, r) =>
+      setFormReferensi({ mode: "edit", topikJudul: judul, referensi: r }),
+    hapus: async (rid) => hasilAksi(await hapusReferensi(idUser, rid)),
+  };
+
+  async function simpanReferensi(n: MasukanReferensi): Promise<HasilBelajar> {
+    const kf = formReferensi;
+    if (!kf || !tujuan) {
+      return { ok: false, pesan: "Terjadi kesalahan. Coba lagi." };
+    }
+    if (kf.mode === "edit") {
+      return hasilAksi(await ubahReferensi(idUser, kf.referensi.id, n));
+    }
+    return hasilAksi(await buatReferensi(idUser, tujuan.id, kf.topicId, n));
+  }
 
   // Referensi dikelompokkan per topik atau sub topik
   const refPerTopik = useMemo(() => {
@@ -1097,6 +1143,7 @@ export default function DetailTujuan() {
                     jumlah={r.pohon.length}
                     hariIni={hariIni}
                     referensi={refPerTopik}
+                    aksiRef={aksiRef}
                     onPecah={setTargetPecah}
                     onKelola={bukaMenuTopik}
                   />
@@ -1171,7 +1218,12 @@ export default function DetailTujuan() {
         onTutup={() => setFormTopik(null)}
         onSimpan={simpanTopik}
       />
-<TambahTopikAI
+      <FormReferensi
+        konfig={formReferensi}
+        onTutup={() => setFormReferensi(null)}
+        onSimpan={simpanReferensi}
+      />
+      <TambahTopikAI
         terbuka={aiTopik}
         goalId={tujuan.id}
         onTutup={() => setAiTopik(false)}
