@@ -13,6 +13,15 @@ export type Topik = {
   parent_id: string | null;
 };
 
+export type RefTopik = {
+  id: string;
+  topic_id: string | null;
+  title: string;
+  url: string | null;
+  kind: string; // artikel | video | buku | dokumentasi | lainnya
+  notes: string | null;
+};
+
 export type SesiDetail = {
   id: string;
   topic_id: string | null;
@@ -250,6 +259,7 @@ export function useDetailTujuan(id: string | undefined) {
   const [lulus, setLulus] = useState<string[]>([]);
   const [tesBerjalan, setTesBerjalan] = useState<string[]>([]);
   const [tesSelesai, setTesSelesai] = useState<string[]>([]);
+  const [referensi, setReferensi] = useState<RefTopik[]>([]);
   const [memuat, setMemuat] = useState(true);
   const [menyegarkan, setMenyegarkan] = useState(false);
   const [galat, setGalat] = useState(false);
@@ -260,14 +270,13 @@ export function useDetailTujuan(id: string | undefined) {
     if (!idUser || !id) return;
     const no = ++permintaan.current;
     try {
-      const { data: prefs } = await supabase
-        .from("user_preferences")
-        .select("timezone")
-        .eq("user_id", idUser)
-        .maybeSingle();
-      const zona = prefs?.timezone ?? "Asia/Jakarta";
-
-      const [hasilTujuan, hasilTopik, hasilSesi, hasilLulus] = await Promise.all([
+      const [hasilPrefs, hasilTujuan, hasilTopik, hasilSesi, hasilLulus, hasilRef] =
+        await Promise.all([
+        supabase
+          .from("user_preferences")
+          .select("timezone")
+          .eq("user_id", idUser)
+          .maybeSingle(),
         supabase
           .from("learning_goals")
           .select(
@@ -298,6 +307,12 @@ export function useDetailTujuan(id: string | undefined) {
           .eq("goal_id", id)
           .eq("user_id", idUser)
           .in("status", ["passed", "failed", "in_progress"]),
+        supabase
+          .from("learning_references")
+          .select("id,topic_id,title,url,kind,notes")
+          .eq("goal_id", id)
+          .eq("user_id", idUser)
+          .order("created_at", { ascending: true }),
       ]);
 
       if (hasilTujuan.error || hasilTopik.error || hasilSesi.error) {
@@ -306,6 +321,7 @@ export function useDetailTujuan(id: string | undefined) {
       }
       if (no !== permintaan.current) return;
 
+      const zona = hasilPrefs.data?.timezone ?? "Asia/Jakarta";
       setHariIni(tglLokal(new Date(), zona));
       if (!hasilTujuan.data) {
         setTidakAda(true);
@@ -315,6 +331,7 @@ export function useDetailTujuan(id: string | undefined) {
         setTujuan(hasilTujuan.data as Tujuan);
         setTopik((hasilTopik.data ?? []) as Topik[]);
         setSesi((hasilSesi.data ?? []) as SesiDetail[]);
+        setReferensi((hasilRef.data ?? []) as RefTopik[]);
         const kuisTopik = hasilLulus.data ?? [];
         setLulus(
           kuisTopik
@@ -354,6 +371,7 @@ export function useDetailTujuan(id: string | undefined) {
     lulus,
     tesBerjalan,
     tesSelesai,
+    referensi,
     memuat,
     menyegarkan,
     galat,

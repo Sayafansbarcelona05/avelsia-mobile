@@ -23,6 +23,7 @@ import AksiTimer, {
 import AlarmSesi, {
   type InfoAlarm,
 } from "../../components/belajar/alarm-sesi";
+import DaftarReferensi from "../../components/belajar/daftar-referensi";
 import DialogTes, { type TargetTes } from "../../components/belajar/dialog-tes";
 import FormSesi, {
   type KonfigFormSesi,
@@ -48,6 +49,11 @@ import MenuSesi, {
 import MenuTopik, {
   type KelolaTopik,
 } from "../../components/belajar/menu-topik";
+import {
+  PecahTopikAI,
+  TambahTopikAI,
+  type TargetPecah,
+} from "../../components/belajar/panel-topik-ai";
 import { C } from "../../components/dashboard/panel-kartu";
 import { toast, WadahToast } from "../../components/toast";
 import { useAuth } from "../../lib/auth";
@@ -68,6 +74,7 @@ import {
   type MasukanSesi,
   type MasukanTopik,
 } from "../../lib/belajar-aksi";
+import type { RefTopik } from "../../lib/belajar-detail";
 import {
   hitungAktivitas,
   hitungDetail,
@@ -289,6 +296,7 @@ function PilBuka({ buka }: { buka: boolean }) {
 }
 
 function BarisAnak({
+  referensi,
   a,
   nomor,
   jumlah,
@@ -297,6 +305,7 @@ function BarisAnak({
   onKelola,
 }: {
   a: NodeAnak;
+  referensi: RefTopik[];
   nomor: number;
   jumlah: number;
   warna: string;
@@ -338,6 +347,7 @@ function BarisAnak({
       {buka ? (
         <View style={[s.isiAnak, { gap: 12 }]}>
           <ChipJadwal jadwal={a.jadwal} hariIni={hariIni} />
+          <DaftarReferensi items={referensi} />
           <Pressable
             onPress={() =>
               onKelola({
@@ -363,6 +373,8 @@ function BarisAnak({
 }
 
 function KartuTopik({
+  onPecah,
+  referensi,
   n,
   nomor,
   jumlah,
@@ -370,6 +382,8 @@ function KartuTopik({
   onKelola,
 }: {
   n: NodeTopik;
+  referensi: Map<string, RefTopik[]>;
+  onPecah: (t: TargetPecah) => void;
   nomor: number;
   jumlah: number;
   hariIni: string;
@@ -427,6 +441,29 @@ function KartuTopik({
       {buka ? (
         <View style={s.isiTopik}>
           <ChipJadwal jadwal={n.jadwal} hariIni={hariIni} />
+          {n.anak.length === 0 ? (
+            <Pressable
+              onPress={() =>
+                onPecah({
+                  topikId: n.topik.id,
+                  judul: n.topik.title,
+                  estimasi: n.topik.estimated_minutes,
+                })
+              }
+              accessibilityRole="button"
+              accessibilityLabel={`Pecahkan topik ${n.topik.title} dengan AI`}
+              style={s.tombolKelola}
+            >
+              <Text style={s.teksKelola}>Pecahkan dengan AI</Text>
+            </Pressable>
+          ) : null}
+          <DaftarReferensi
+            items={referensi.get(n.topik.id) ?? []}
+            dariSub={n.anak.map((x) => ({
+              sumber: x.topik.title,
+              items: referensi.get(x.topik.id) ?? [],
+            }))}
+          />
           <Pressable
             onPress={() =>
               onKelola({
@@ -451,6 +488,7 @@ function KartuTopik({
                 <BarisAnak
                   key={a.topik.id}
                   a={a}
+                  referensi={referensi.get(a.topik.id) ?? []}
                   nomor={j + 1}
                   jumlah={n.anak.length}
                   warna={warna}
@@ -663,6 +701,7 @@ export default function DetailTujuan() {
     lulus,
     tesBerjalan,
     tesSelesai,
+    referensi,
     memuat,
     menyegarkan,
     galat,
@@ -677,6 +716,8 @@ export default function DetailTujuan() {
   const [formTopik, setFormTopik] = useState<KonfigFormTopik | null>(null);
   const [menuTopik, setMenuTopik] = useState<KelolaTopik | null>(null);
   const [tesTarget, setTesTarget] = useState<TargetTes | null>(null);
+  const [targetPecah, setTargetPecah] = useState<TargetPecah | null>(null);
+  const [aiTopik, setAiTopik] = useState(false);
   const setelahTesTutup = useRef<(() => void) | null>(null);
 
   // Tombol Tes: topik tanpa sub topik, sudah punya sesi selesai, belum lulus
@@ -791,6 +832,16 @@ export default function DetailTujuan() {
     () => (hariIni ? hitungAktivitas(sesi, hariIni) : null),
     [sesi, hariIni]
   );
+
+  // Referensi dikelompokkan per topik atau sub topik
+  const refPerTopik = useMemo(() => {
+    const peta = new Map<string, RefTopik[]>();
+    for (const x of referensi) {
+      if (!x.topic_id) continue;
+      peta.set(x.topic_id, [...(peta.get(x.topic_id) ?? []), x]);
+    }
+    return peta;
+  }, [referensi]);
 
   function kembali() {
     if (router.canGoBack()) router.back();
@@ -1012,6 +1063,23 @@ export default function DetailTujuan() {
             >
               <Text style={s.teksTambah}>Tambah topik</Text>
             </Pressable>
+            <Pressable
+              onPress={() => setAiTopik(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Tambah topik dengan AI"
+              style={[
+                s.tombolTambah,
+                {
+                  backgroundColor: "transparent",
+                  borderWidth: 1,
+                  borderColor: C.aqua,
+                },
+              ]}
+            >
+              <Text style={[s.teksTambah, { color: C.aqua }]}>
+                Tambah topik dengan AI
+              </Text>
+            </Pressable>
             {r.pohon.length === 0 ? (
               <View style={s.kosong}>
                 <Text style={s.teksKosong}>Belum ada topik.</Text>
@@ -1028,6 +1096,8 @@ export default function DetailTujuan() {
                     nomor={i + 1}
                     jumlah={r.pohon.length}
                     hariIni={hariIni}
+                    referensi={refPerTopik}
+                    onPecah={setTargetPecah}
                     onKelola={bukaMenuTopik}
                   />
                 ))}
@@ -1100,6 +1170,18 @@ export default function DetailTujuan() {
         hariIni={hariIni}
         onTutup={() => setFormTopik(null)}
         onSimpan={simpanTopik}
+      />
+<TambahTopikAI
+        terbuka={aiTopik}
+        goalId={tujuan.id}
+        onTutup={() => setAiTopik(false)}
+        onTersimpan={muat}
+      />
+      <PecahTopikAI
+        target={targetPecah}
+        goalId={tujuan.id}
+        onTutup={() => setTargetPecah(null)}
+        onTersimpan={muat}
       />
       <DialogTes
         target={tesTarget}

@@ -18,6 +18,7 @@ import {
 import FormTujuan, {
   type KonfigFormTujuan,
 } from "../../components/belajar/form-tujuan";
+import FormTujuanAI from "../../components/belajar/form-tujuan-ai";
 import {
   IkonApi,
   IkonBuku,
@@ -84,6 +85,7 @@ export default function Belajar() {
   const userId = session?.user.id ?? "";
   const [formTujuan, setFormTujuan] = useState<KonfigFormTujuan | null>(null);
   const [menuTujuan, setMenuTujuan] = useState<KelolaTujuan | null>(null);
+  const [aiTujuan, setAiTujuan] = useState(false);
   const setelahMenuTutup = useRef<(() => void) | null>(null);
 
   async function simpanTujuan(n: MasukanTujuan): Promise<HasilBelajar> {
@@ -194,13 +196,22 @@ export default function Belajar() {
             Susun tujuan belajar, pecah jadi topik, lalu catat sesinya.
           </Text>
         </View>
-        <Pressable
-          onPress={() => setFormTujuan({ mode: "tambah" })}
-          accessibilityRole="button"
-          style={({ pressed }) => [s.tombolTambah, pressed && { opacity: 0.8 }]}
-        >
-          <Text style={s.teksTombolTambah}>Tambah tujuan</Text>
-        </Pressable>
+        <View style={s.kolomTombol}>
+          <Pressable
+            onPress={() => setFormTujuan({ mode: "tambah" })}
+            accessibilityRole="button"
+            style={({ pressed }) => [s.tombolTambah, pressed && { opacity: 0.8 }]}
+          >
+            <Text style={s.teksTombolTambah}>Tambah tujuan</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => setAiTujuan(true)}
+            accessibilityRole="button"
+            style={({ pressed }) => [s.tombolAi, pressed && { opacity: 0.8 }]}
+          >
+            <Text style={s.teksTombolAi}>Tujuan dengan AI</Text>
+          </Pressable>
+        </View>
       </View>
 
       {/* Ringkasan: satu kartu, tiga baris berikon */}
@@ -458,6 +469,14 @@ export default function Belajar() {
       </View>
     </ScrollView>
 
+    <FormTujuanAI
+      terbuka={aiTujuan}
+      onTutup={() => setAiTujuan(false)}
+      onTersimpan={async (goalId) => {
+        await muat();
+        if (goalId) router.push(`/tujuan/${goalId}` as never);
+      }}
+    />
     <FormTujuan
       konfig={formTujuan}
       hariIni={hariIni}
@@ -551,6 +570,15 @@ const s = StyleSheet.create({
     backgroundColor: C.aqua,
   },
   teksTombolTambah: { fontSize: 13, fontWeight: "600", color: C.ink },
+  kolomTombol: { gap: 8, alignItems: "flex-end" },
+  tombolAi: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: C.aqua,
+  },
+  teksTombolAi: { fontSize: 13, fontWeight: "600", color: C.aqua },
   sisiKanan: {
     marginLeft: "auto",
     flexDirection: "row",
